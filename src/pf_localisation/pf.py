@@ -25,10 +25,10 @@ class PFLocaliser(PFLocaliserBase):
         
         # ----- Particle cloud parameters
         self.NUMBER_OF_PARTICLES = 200
-        self.CLOUD_X_NOISE = 1
-        self.CLOUD_Y_NOISE = 1
+        self.CLOUD_X_NOISE = 0.5
+        self.CLOUD_Y_NOISE = 0.5
         self.CLOUD_ROTATION_NOISE = 1
-        
+
        
     def initialise_particle_cloud(self, initialpose):
         rospy.loginfo("In initialise_particle_cloud")
@@ -51,14 +51,16 @@ class PFLocaliser(PFLocaliserBase):
         
         for i in range(0, self.NUMBER_OF_PARTICLES + 1):
             
-            rnd = random.normalvariate(0, 1)
+            rndx = random.normalvariate(0, 1)
+            rndy = random.normalvariate(0, 1)
+            rndr = random.normalvariate(0, 1)
             
             pose = Pose()
-            pose.position.x = initialpose.pose.pose.position.x + rnd * self.CLOUD_X_NOISE
-            pose.position.y = initialpose.pose.pose.position.y + rnd * self.CLOUD_X_NOISE
+            pose.position.x = initialpose.pose.pose.position.x + rndx * self.CLOUD_X_NOISE
+            pose.position.y = initialpose.pose.pose.position.y + rndy * self.CLOUD_Y_NOISE
             pose.position.z = 0
-            pose.orientation = rotateQuaternion(pose.orientation, rnd * self.CLOUD_ROTATION_NOISE)
-            
+            pose.orientation = rotateQuaternion(initialpose.pose.pose.orientation, rndr * self.CLOUD_ROTATION_NOISE)
+            rospy.loginfo(pose)
             self.particlecloud.poses.append(pose)
         
         return self.particlecloud
@@ -75,7 +77,29 @@ class PFLocaliser(PFLocaliserBase):
             | scan (sensor_msgs.msg.LaserScan): laser scan to use for update
 
          """
-        pass
+        # Get likelihood weighting of each pose
+        weighted_poses = []
+        for pose in self.particlecloud.poses:
+            weight = self.sensor_model.get_weight(scan, pose)
+            weighted_poses.append([pose, weight])
+            
+        # Resample particlecloud
+        new_poses = PoseArray()
+        cdf = [weighted_poses[0][1]]
+        for i in range(1, len(weighted_poses)):
+            cdf.append(cdf[i-1] + weighted_poses[i][1])
+        
+        threshold = random.uniform(0, 1/len(weighted_poses))
+        i = 1
+        
+        for j in range(0, self.NUMBER_OF_PARTICLES + 1):
+            while threshold > cdf[i]:
+                i += 1
+            new_poses.poses.append(weighted_poses[i][0])
+            threshold += 1/len(weighted_poses)
+            
+        # Update pointcloud
+        self.pointcloud = new_poses
 
     def estimate_pose(self):
         rospy.loginfo("In estimate_pose")
