@@ -2,6 +2,7 @@ from geometry_msgs.msg import Pose, PoseArray, Quaternion
 from . pf_base import PFLocaliserBase
 import math
 import rospy
+import numpy as np
 
 from . util import rotateQuaternion, getHeading
 import random
@@ -23,16 +24,23 @@ class PFLocaliser(PFLocaliserBase):
         # ----- Sensor model parameters
         self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
         
-        # ----- Particle cloud parameters
-        self.NUMBER_OF_PARTICLES = 300
-        self.CLOUD_X_NOISE = 0.5
-        self.CLOUD_Y_NOISE = 0.5
+        # ----- Initial particle cloud parameters
+        self.NUMBER_OF_PARTICLES = 400
+        self.CLOUD_X_NOISE = 4
+        self.CLOUD_Y_NOISE = 4
         self.CLOUD_ROTATION_NOISE = 1
+        
+        # ----- Resample particle cloud parameters
+        self.RESAMPLE_X_NOISE = 0.1
+        self.RESAMPLE_Y_NOISE = 0.1
+        self.RESAMPLE_ROTATION_NOISE = 0.1
+        
+        self.STOCHASTIC_RATIO = 0.5
+        self.RANDOM_EXPLORATION_RATIO = 0.25
+        self.EDUCATED_ESTIMATE_RATIO = 0.25
 
        
     def initialise_particle_cloud(self, initialpose):
-        rospy.loginfo("In initialise_particle_cloud")
-        rospy.loginfo(initialpose)
         """
         Set particle cloud to initialpose plus noise
 
@@ -46,8 +54,6 @@ class PFLocaliser(PFLocaliserBase):
         :Return:
             | (geometry_msgs.msg.PoseArray) poses of the particles
         """
-        
-        self.particlecloud = PoseArray()
         
         for i in range(0, self.NUMBER_OF_PARTICLES + 1):
             
@@ -68,7 +74,7 @@ class PFLocaliser(PFLocaliserBase):
  
     
     def update_particle_cloud(self, scan):
-        rospy.loginfo("In update_particle_cloud")
+
         """
         This should use the supplied laser scan to update the current
         particle cloud. i.e. self.particlecloud should be updated.
@@ -99,17 +105,49 @@ class PFLocaliser(PFLocaliserBase):
         threshold = random.uniform(0, 1/len(weighted_poses))
         i = 0
         
-        for j in range(0, self.NUMBER_OF_PARTICLES):
+        # Resample select portion of poses
+        for j in range(0, math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO)):
             while threshold > cdf[i]:
                 i += 1
             new_poses.poses.append(weighted_poses[i][0])
             threshold += 1/len(weighted_poses)
+        
+        # Add some estimate poses
+        for k in range(0, math.floor(self.NUMBER_OF_PARTICLES * self.EDUCATED_ESTIMATE_RATIO)):
+            rndx = random.normalvariate(0, 1)
+            rndy = random.normalvariate(0, 1)
+            rndr = random.normalvariate(0, 1)
+            
+            # Adding informed estimates based on highest weighted pose
+            pose = Pose()
+            pose.position.x = max(weighted_poses, key=lambda x: x[1])[0].position.x + rndx * self.RESAMPLE_X_NOISE
+            pose.position.y = max(weighted_poses, key=lambda x: x[1])[0].position.y + rndy * self.RESAMPLE_Y_NOISE
+            pose.position.z = 0
+            pose.orientation = rotateQuaternion(max(weighted_poses, key=lambda x: x[1])[0].orientation, rndr * self.RESAMPLE_ROTATION_NOISE)
+
+            new_poses.poses.append(pose)
+        
+        # Add some random exploratory poses
+        for l in range(0, math.floor(self.NUMBER_OF_PARTICLES * self.RANDOM_EXPLORATION_RATIO)):
+            # Based off map lying on grid line y = 30 - 5 with thickness of approx 10 at widest
+            rnd = random.normalvariate(0, 5)
+            
+            pose = Pose()
+            # Not 0, 30 as lots of points lie off map
+            x = random.uniform(3, 27)
+            y = (30 - x) + rnd
+            
+            pose.position.x = x
+            pose.position.y = y
+            pose.orientation.w = random.uniform(0, 1)
+            pose.orientation.z = random.uniform(-1, 1)
+            
+            new_poses.poses.append(pose)
             
         # Update particlecloud
         self.particlecloud = new_poses
 
     def estimate_pose(self):
-        rospy.loginfo("In estimate_pose")
         """
         This should calculate and return an updated robot pose estimate based
         on the particle cloud (self.particlecloud).
@@ -125,48 +163,29 @@ class PFLocaliser(PFLocaliserBase):
         :Return:
             | (geometry_msgs.msg.Pose) robot's estimated pose.
          """
-         
-        # Calculate mean x and y
-        mean_x = sum(pose.position.x for pose in self.particlecloud.poses) / len(self.particlecloud.poses)
-        mean_y = sum(pose.position.y for pose in self.particlecloud.poses) / len(self.particlecloud.poses)
+        filtered_poses = []
         
-        # Calculate standard deviation for x and y
-        x_cum_sq_deviation = 0
-        y_cum_sq_deviation = 0
+        xy_values = np.array([(pose.position.x, pose.position.y) for pose in self.particlecloud.poses])
+        wz_values = np.array([(pose.orientation.w, pose.orientation.z) for pose in self.particlecloud.poses])
         
-        for pose in self.particlecloud.poses:
-            x_cum_sq_deviation += (pose.position.x - mean_x) ** 2
-            y_cum_sq_deviation += (pose.position.y - mean_y) ** 2
+        q1 = np.percentile(xy_values, 25, axis=0)
+        q3 = np.percentile(xy_values, 75, axis=0)
+        iqr = q3 - q1
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
         
-        x_std_dev = math.sqrt(x_cum_sq_deviation / len(self.particlecloud.poses))
-        y_std_dev = math.sqrt(y_cum_sq_deviation / len(self.particlecloud.poses))
+        # Remove outliers
         
-        if x_std_dev > 0.001 or y_std_dev > 0.001:
-            
-            # Thresholds based on position lying 1 standard deviation from mean
-            x_lower_threshold = mean_x - x_std_dev
-            x_upper_threshold = mean_x + x_std_dev
-            y_lower_threshold = mean_y - y_std_dev
-            y_upper_threshold = mean_y + y_std_dev
+        non_outliers = xy_values[(xy_values >= lower_bound).all(axis=1) & (xy_values <= upper_bound).all(axis=1)]
         
-            # Filter poses based on the threshold
-            filtered_poses = [pose for pose in self.particlecloud.poses if
-                  (pose.position.x < x_lower_threshold or pose.position.x > x_upper_threshold) or
-                  (pose.position.y < y_lower_threshold or pose.position.y > y_upper_threshold)]
-            rospy.loginfo(f"x mean: {mean_x}")
-            rospy.loginfo(f"Y mean: {mean_x}")
-            rospy.loginfo(f"x sdv: {x_std_dev}")
-            rospy.loginfo(f"y sdv: {y_std_dev}")
-            print("Original number of poses:", len(self.particlecloud.poses))
-            print("Number of filtered poses:", len(filtered_poses))
-        else:
-            filtered_poses = self.particlecloud.poses
-            
-        # Calculate average pose from filtered poses
+        cluster_centroid = np.mean(non_outliers, axis=0)
+        mean_orientation = np.mean(wz_values, axis=0)
+        
         estimated_pose = Pose()
-        estimated_pose.position.x = sum(pose.position.x for pose in filtered_poses) / len(filtered_poses) if len(filtered_poses) else 1
-        estimated_pose.position.y = sum(pose.position.y for pose in filtered_poses) / len(filtered_poses) if len(filtered_poses) else 1
-        estimated_pose.orientation.z = sum(pose.orientation.z for pose in filtered_poses) / len(filtered_poses) if len(filtered_poses) else 1
-        estimated_pose.orientation.w = sum(pose.orientation.w for pose in filtered_poses) / len(filtered_poses) if len(filtered_poses) else 1
+        
+        estimated_pose.position.x = cluster_centroid[0]
+        estimated_pose.position.y = cluster_centroid[1]
+        estimated_pose.orientation.w = mean_orientation[0]
+        estimated_pose.orientation.z = mean_orientation[1]
         
         return estimated_pose
