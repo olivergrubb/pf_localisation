@@ -129,7 +129,7 @@ class PFLocaliser(PFLocaliserBase):
         
         # Add some random exploratory poses
         for l in range(0, math.floor(self.NUMBER_OF_PARTICLES * self.RANDOM_EXPLORATION_RATIO)):
-            # Based off map lying on grid line y = 30 - 5 with thickness of approx 10 at widest
+            # Based off map lying on grid line y = 30 - x with thickness of approx 10 at widest
             rnd = random.normalvariate(0, 5)
             
             pose = Pose()
@@ -163,7 +163,6 @@ class PFLocaliser(PFLocaliserBase):
         :Return:
             | (geometry_msgs.msg.Pose) robot's estimated pose.
          """
-        filtered_poses = []
         
         xy_values = np.array([(pose.position.x, pose.position.y) for pose in self.particlecloud.poses])
         wz_values = np.array([(pose.orientation.w, pose.orientation.z) for pose in self.particlecloud.poses])
