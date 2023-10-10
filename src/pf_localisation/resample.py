@@ -1,20 +1,33 @@
 import numpy as np 
 import math
-import scipy.integrate as spi
+#import scipy.integrate as spi
 import copy
+import rospy
+from geometry_msgs.msg import Pose
 
 #me
-def multinomial_resampling(particles, weights):
+def multinomial_resampling(particles, weights, num_of_samples):
     num_particles = len(particles)
     sampled_particles = []
 
-    for i in range(1, num_particles):
-        sample = np.random.choice(particles, p=weights)
-        np.append(sampled_particles, sample)
+    sum_of_weights = 0
+    for i in range(0, len(weights)):
+        sum_of_weights += weights[i]
+    
+    normaliser = 1 / sum_of_weights
+
+    normalised_weights = []
+    
+    for i in range(0, len(weights)):
+        normalised_weights.append(weights[i] * normaliser)
+
+    for i in range(0, num_of_samples):
+        sample = np.random.choice(particles, p=normalised_weights)
+        sampled_particles.append(sample)
     return sampled_particles
 
 #me
-def residual_resampling(particles, weights):
+def residual_resampling(particles, weights, num_of_samples):
     num_particles = len(particles)
     sampled_particles = []
 
@@ -29,7 +42,7 @@ def residual_resampling(particles, weights):
     # Residual resampling
     r = np.random.uniform(0, 1) / num_particles
 
-    for i in range(num_particles):
+    for i in range(num_of_samples):
         target_weight = r + i / num_particles
         for j in range(num_particles):
             if target_weight <= cdf[j]:
@@ -39,7 +52,7 @@ def residual_resampling(particles, weights):
     return sampled_particles
 
 #me
-def systematic_resampling(particles, weights):
+def systematic_resampling(particles, weights, num_of_samples):
     num_particles = len(particles)
     sampled_particles = []
     stochastic_ratio = 1
@@ -56,7 +69,7 @@ def systematic_resampling(particles, weights):
     i = 0
         
     # Resample select portion of posessudo apt-get install python3-scipyS
-    for j in range(0, math.floor(num_particles * stochastic_ratio)):
+    for j in range(0, num_of_samples):
         while threshold > cdf[i]:
             i += 1
         sampled_particles.append(particles[i])  # Corrected the line
@@ -65,7 +78,7 @@ def systematic_resampling(particles, weights):
     return sampled_particles
 
 #me
-def stratified_resampling(particles, weights):
+def stratified_resampling(particles, weights, num_of_samples):
     num_particles = len(particles)
     sampled_particles = []
 
@@ -79,8 +92,8 @@ def stratified_resampling(particles, weights):
     # Stratified resampling
     u = [np.random.uniform(0, 1) / num_particles + (i / num_particles) for i in range(num_particles)]
     
-    for i in range(num_particles):
-        for j in range(num_particles):
+    for i in range(num_of_samples):
+        for j in range(num_of_samples):
             if cdf[j] > u[i]:
                 sampled_particles.append(particles[j])
                 break
@@ -88,19 +101,41 @@ def stratified_resampling(particles, weights):
     return sampled_particles
 
 #me
-def adaptive_resampling(particles, weights, threshold):
+def adaptive_resampling(particles, weights, num_of_samples, weight_threshold, particle_threshold):
     num_particles = len(particles)
     low_weight_particles = []
 
-    for i in range(1,num_particles):
-        if weights[i]<threshold:
-            low_weight_particles.append(particles[i])
+    sum_of_weights = 0
+    for i in range(0, len(weights)):
+        sum_of_weights += weights[i]
     
-    if len(low_weight_particles) > threshold:
-        sampled_particles = stratified_resampling(low_weight_particles, weights)
+    normaliser = 1 / sum_of_weights
+
+    normalised_weights = []
+    
+    for i in range(0, len(weights)):
+        normalised_weights.append(weights[i] * normaliser)
+
+    highest_weight = 0
+    lowest_weight = 1
+    for i in range(0,num_particles):
+        if normalised_weights[i] > highest_weight:
+            highest_weight = normalised_weights[i]
+        if normalised_weights[i] < lowest_weight:
+            lowest_weight = normalised_weights[i]
+        if normalised_weights[i]<weight_threshold:
+            low_weight_particles.append(particles[i])
+    rospy.loginfo("Highest weight: %f", highest_weight)
+    rospy.loginfo("Lowest weight: %f", lowest_weight)
+    rospy.loginfo("Number of particles: %d", num_particles)
+    rospy.loginfo("Number of low weight particles: %d", len(low_weight_particles))
+    if len(low_weight_particles) > particle_threshold:
+        rospy.loginfo("Stratified Resampling")
+        sampled_particles = stratified_resampling(low_weight_particles, weights, num_of_samples)
     
     else:
-        sampled_particles= multinomial_resampling(particles, weights)
+        rospy.loginfo("multinomial Resampling")
+        sampled_particles = multinomial_resampling(particles, weights, num_of_samples)
     
     return sampled_particles
 
@@ -109,151 +144,79 @@ def compute_weighted_average(particles, weights):
     num_particles = len(particles)
     weighted_sum_x = 0
     weighted_sum_y = 0
-    weighted_sum_theta = 0
+    weighted_sum_w = 0
+    weighted_sum_z = 0
+
 
     for i in range(1, num_particles):
-        weighted_sum_x += weights[i] * particles[i].x
-        weighted_sum_y += weights[i] * particles[i].y
-        weighted_sum_theta += weights[i] * particles[i].theta
+        weighted_sum_x += weights[i] * particles[i].position.x
+        weighted_sum_y += weights[i] * particles[i].position.y
+        weighted_sum_w += weights[i] * particles[i].orientation.w
+        weighted_sum_z += weights[i] * particles[i].orientation.z
     
-    weighted_avg_x = weighted_sum_x
-    weighted_avg_y = weighted_sum_y
-    weighted_avg_theta = weighted_sum_theta
+    weighted_avg_x = weighted_sum_x / num_particles
+    weighted_avg_y = weighted_sum_y / num_particles
+    weighted_avg_w = weighted_sum_w / num_particles
+    weighted_avg_z = weighted_sum_z / num_particles
 
-    return (weighted_avg_x, weighted_avg_y, weighted_avg_theta)
+    return (weighted_avg_x, weighted_avg_y, weighted_avg_w, weighted_avg_z)
 
 #me
-def reguralized_resampling(particles, weights, regularization_factor):
+def reguralized_resampling(particles, weights, num_of_samples, regularization_factor):
     num_particles = len(particles)
     sampled_particles = []
-
     weighted_average = compute_weighted_average(particles, weights)
 
-    for i in range(1, num_particles):
-        regularized_particle = (1 - regularization_factor) * particles[i] + regularization_factor * weighted_average
+    for i in range(0, num_of_samples):
+        regularized_particle = Pose()
+        regularized_particle.position.x = (1 - regularization_factor) * particles[i].position.x + regularization_factor * weighted_average[0]
+        regularized_particle.position.y = (1 - regularization_factor) * particles[i].position.y + regularization_factor * weighted_average[1]
+        regularized_particle.orientation.w = (1 - regularization_factor) * particles[i].orientation.w + regularization_factor * weighted_average[2]
+        regularized_particle.orientation.z = (1 - regularization_factor) * particles[i].orientation.z + regularization_factor * weighted_average[3]
         sampled_particles.append(regularized_particle)
 
     return sampled_particles
 
-#chatgpt
-def compute_true_distribution_prob(true_distribution, bins):
-    true_distribution_prob = {}
-
-    for bin in bins:
-        bin_start = bin.start
-        bin_end = bin.end
-
-        # Integrate the true distribution over the bin range (for 1D)
-        true_prob_bin, _ = spi.quad(true_distribution, bin_start, bin_end)
-
-        true_distribution_prob[bin] = true_prob_bin
-
-    return true_distribution_prob
-
-#chatgpt
-def compute_particle_distribution_prob(particles, weights, bins):
-    particle_distribution_prob = {}
-
-    for bin in bins:
-        bin_start = bin.start
-        bin_end = bin.end
-        particles_in_bin = []
-
-        for i, particle in enumerate(particles):
-            # Determine if the particle belongs to the current bin
-            if bin_start <= particle.position <= bin_end:
-                particles_in_bin.append(weights[i])
-
-        # Calculate the particle distribution probability for the bin
-        if particles_in_bin:
-            particle_prob_bin = sum(particles_in_bin) / sum(weights)
-        else:
-            particle_prob_bin = 0.0
-
-        particle_distribution_prob[bin] = particle_prob_bin
-
-    return particle_distribution_prob
-
-#chatgpt
-def compute_kld_threshold(true_distribution, particles, weights, bins):
+def residual_stratified_resampling(particles, weights, sample_size):
     num_particles = len(particles)
+    new_particles = [None] * num_particles
 
-    true_distribution_prob = compute_true_distribution_prob(true_distribution, bins)
-    particle_distribution_prob = compute_particle_distribution_prob(particles, weights, bins)
+    # Calculate the number of whole samples and the remainder
+    num_samples = int(sum(weights))
+    remainder = sum(weights) - num_samples
 
-    kld = 0
+    # Calculate the size of each stratum
+    stratum_size = num_samples / num_particles
 
-    for bin in bins:
-        kld += true_distribution_prob[bin] * np.log(true_distribution_prob[bin] / particle_distribution_prob[bin])
+    # Initialize the cumulative weight and stratum counter
+    cumulative_weight = 0.0
+    stratum = 0
 
-    return kld
-
-#chatgpt
-def KLD_sampling(particles, weights, true_distribution, max_particles):
-    num_particles = len(particles)
-    kld_threshold = compute_kld_threshold(true_distribution, particles, weights, bins)
-
-    if num_particles > max_particles:
-        low_weight_particles = []
-        new_particles = []
-
-        for i in range(num_particles):
-            if weights[i] < kld_threshold:
-                low_weight_particles.append(particles[i])
-
-        if len(low_weight_particles) > max_particles:
-            # Perform more sophisticated resampling (e.g., stratified or residual)
-            new_particles = stratified_resampling(low_weight_particles, weights)
-        else:
-            new_particles = particles
-
-    return new_particles
-
-#chatgpt wrote this one
-def residual_stratified_resampling(particles, weights):
-    num_particles = len(weights)
-    
-    sum_of_weights = sum(weights)
-    normalizer = 1 / sum_of_weights
-    cdf = [weights[0] * normalizer]
-    
-    for i in range(1, num_particles):
-        cdf.append(cdf[i-1] + weights[i] * normalizer)
-    
-    # Create the indices for the selected particles
-    selected_indices = []
-    
-    # Step 1: Determine the number of copies for each particle
-    num_copies = []
-    for i in range(num_particles):
-        num_copies[i] = int(num_particles * weights[i])
-    
-    # Step 2: Calculate the remaining fractional parts
-    fractional_parts = num_particles * weights - num_copies
-    
-    # Step 3: Resample the whole number of copies
-    j = 0
-    for i in range(num_particles):
-        while num_copies[i] > 0:
-            selected_indices[j] = i
-            num_copies[i] -= 1
-            j += 1
-    
-    # Step 4: Resample the fractional parts
-    remaining_fractional_parts = fractional_parts - np.floor(fractional_parts)
-    cum_fractional_parts = np.cumsum(remaining_fractional_parts)
-    u = np.random.rand() / num_particles  # Random number to select particles
+    # Ensure that the specified sample_size is within bounds
+    sample_size = min(sample_size, num_samples)
     
     for i in range(num_particles):
-        while u + i / num_particles > cum_fractional_parts[j]:
-            j += 1
-        selected_indices[j] = i
-    
-    # Return the selected indices
-    return selected_indices
+        # Calculate the target number of samples for this stratum
+        target_samples = int(stratum_size) + (1 if remainder > 0 else 0)
+        remainder -= 1
+
+        for k in range(target_samples):
+            cumulative_weight += 1.0 / num_samples
+
+            while cumulative_weight > weights[stratum]:
+                cumulative_weight -= weights[stratum]
+                new_particles[i] = copy.deepcopy(particles[stratum])
+                stratum = (stratum + 1) % num_particles
+                
+                # Check if the desired sample size has been reached
+                if new_particles.count(None) == num_particles - sample_size:
+                    return [p for p in new_particles if p is not None]
+
+    return [p for p in new_particles if p is not None]
+
 #me with help learning copy import
-def smoothed_resampling(particles, weights):
-    num_particles = len(particles)
+def smoothed_resampling(particles, weights, num_of_samples):
+    num_particles = num_of_samples
     total_weight = sum(weights)
     normalized_weights = [w / total_weight for w in weights]
     
@@ -288,39 +251,6 @@ def smoothed_resampling(particles, weights):
         # Add a copy of the selected particle to resampled_particles
         resampled_particles.append(copy.copy(particles[index]))
 
-    # Return the resampled set of particles
-    return resampled_particles
-
-#chatgpt
-def AdaptiveThresholdResampling(particles, resampling_threshold_fn):
-    num_particles = len(particles)
-    
-    # Calculate the resampling threshold based on particle weights
-    resampling_threshold = resampling_threshold_fn(particles)
-    
-    # Initialize resampled_particles as an empty list
-    resampled_particles = []
-    
-    # Initialize variables for resampling
-    current_weight = particles[0].weight
-    j = 0
-    
-    for i in range(1, num_particles):
-        # Calculate the number of times the current particle will be duplicated
-        num_copies = math.floor(current_weight / resampling_threshold)
-        
-        # Add num_copies copies of the current particle to resampled_particles
-        for k in range(1, num_copies + 1):
-            resampled_particles.append(copy.deepcopy(particles[i - 1]))
-        
-        # Calculate the remaining weight for the current particle
-        current_weight = current_weight - num_copies * resampling_threshold
-        
-        # Check if we should move to the next particle
-        if current_weight < resampling_threshold:
-            j = i
-            current_weight += particles[j].weight
-    
     # Return the resampled set of particles
     return resampled_particles
 

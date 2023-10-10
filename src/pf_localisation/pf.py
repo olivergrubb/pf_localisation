@@ -3,7 +3,7 @@ from . pf_base import PFLocaliserBase
 import math
 import rospy
 import numpy as np
-
+from . resample import *
 from . util import rotateQuaternion, getHeading
 import random
 
@@ -36,8 +36,8 @@ class PFLocaliser(PFLocaliserBase):
         self.RESAMPLE_ROTATION_NOISE = 0.1
         
         self.STOCHASTIC_RATIO = 0.5
-        self.RANDOM_EXPLORATION_RATIO = 0.25
-        self.EDUCATED_ESTIMATE_RATIO = 0.25
+        self.RANDOM_EXPLORATION_RATIO = 0.3
+        self.EDUCATED_ESTIMATE_RATIO = 0.2
 
        
     def initialise_particle_cloud(self, initialpose):
@@ -86,8 +86,50 @@ class PFLocaliser(PFLocaliserBase):
         # Get likelihood weighting of each pose
         weighted_poses = [(pose, self.sensor_model.get_weight(scan, pose)) for pose in self.particlecloud.poses]
         
+        
+        # Multinomial resampling
+        
+        #new_poses = multinomial_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        
+        
+        # Residual resampling
+        
+        #new_poses = residual_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        
+
+        # Systematic resampling
+        
+        #new_poses = systematic_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        
+
+        # Stratified resampling
+        
+        #new_poses = stratified_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        
+
+        # Adaptive resampling (Still testing)
+        
+        #new_poses = adaptive_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO), 0.5, self.NUMBER_OF_PARTICLES/2)
+        
+
+        # reguralized resampling
+        
+        new_poses = reguralized_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO), 0.5)
+        
+        
+        # Smoothed resampling
+        
+        #new_poses = smoothed_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        
+
+        # Residual stratisfied resampling
+        
+        #new_poses = residual_stratified_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        
+        """ 
+        # Original Ollie resampling code
         # Resample particlecloud
-        new_poses = PoseArray()
+        new_poses = []
         
         # Calculate normaliser for weights
         sum_of_weights = 0
@@ -109,9 +151,9 @@ class PFLocaliser(PFLocaliserBase):
         for j in range(0, math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO)):
             while threshold > cdf[i]:
                 i += 1
-            new_poses.poses.append(weighted_poses[i][0])
+            new_poses.append(weighted_poses[i][0])
             threshold += 1/len(weighted_poses)
-        
+        """
         # Add some estimate poses
         for k in range(0, math.floor(self.NUMBER_OF_PARTICLES * self.EDUCATED_ESTIMATE_RATIO)):
             rndx = random.normalvariate(0, 1)
@@ -125,7 +167,7 @@ class PFLocaliser(PFLocaliserBase):
             pose.position.z = 0
             pose.orientation = rotateQuaternion(max(weighted_poses, key=lambda x: x[1])[0].orientation, rndr * self.RESAMPLE_ROTATION_NOISE)
 
-            new_poses.poses.append(pose)
+            new_poses.append(pose)
         
         # Add some random exploratory poses
         for l in range(0, math.floor(self.NUMBER_OF_PARTICLES * self.RANDOM_EXPLORATION_RATIO)):
@@ -142,11 +184,11 @@ class PFLocaliser(PFLocaliserBase):
             pose.orientation.w = random.uniform(0, 1)
             pose.orientation.z = random.uniform(-1, 1)
             
-            new_poses.poses.append(pose)
+            new_poses.append(pose)
             
         # Update particlecloud
-        self.particlecloud = new_poses
-
+        self.particlecloud.poses = new_poses
+        
     def estimate_pose(self):
         """
         This should calculate and return an updated robot pose estimate based
