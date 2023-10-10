@@ -31,13 +31,13 @@ class PFLocaliser(PFLocaliserBase):
         self.CLOUD_ROTATION_NOISE = 1
         
         # ----- Resample particle cloud parameters
-        self.RESAMPLE_X_NOISE = 0.1
-        self.RESAMPLE_Y_NOISE = 0.1
-        self.RESAMPLE_ROTATION_NOISE = 0.1
+        self.ROUGHENING_X_NOISE = 0.1
+        self.ROUGHENING_Y_NOISE = 0.1
+        self.ROUGHENING_ROTATION_NOISE = 0.1
         
-        self.STOCHASTIC_RATIO = 0.5
-        self.RANDOM_EXPLORATION_RATIO = 0.3
-        self.EDUCATED_ESTIMATE_RATIO = 0.2
+        self.STOCHASTIC_RATIO = 0.8
+        self.RANDOM_EXPLORATION_RATIO = 0.1
+        self.EDUCATED_ESTIMATE_RATIO = 0.1
 
        
     def initialise_particle_cloud(self, initialpose):
@@ -99,7 +99,7 @@ class PFLocaliser(PFLocaliserBase):
 
         # Systematic resampling
         
-        #new_poses = systematic_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        new_poses = systematic_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
         
 
         # Stratified resampling
@@ -114,7 +114,7 @@ class PFLocaliser(PFLocaliserBase):
 
         # reguralized resampling
         
-        new_poses = reguralized_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO), 0.5)
+        #new_poses = reguralized_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO), 0.5)
         
         
         # Smoothed resampling
@@ -160,12 +160,15 @@ class PFLocaliser(PFLocaliserBase):
             rndy = random.normalvariate(0, 1)
             rndr = random.normalvariate(0, 1)
             
+
             # Adding informed estimates based on highest weighted pose
+            max_weighted_pose = max(weighted_poses, key=lambda x: x[1])[0]
+            
             pose = Pose()
-            pose.position.x = max(weighted_poses, key=lambda x: x[1])[0].position.x + rndx * self.RESAMPLE_X_NOISE
-            pose.position.y = max(weighted_poses, key=lambda x: x[1])[0].position.y + rndy * self.RESAMPLE_Y_NOISE
+            pose.position.x = max_weighted_pose.position.x + rndx * self.ROUGHENING_X_NOISE
+            pose.position.y = max_weighted_pose.position.y + rndy * self.ROUGHENING_Y_NOISE
             pose.position.z = 0
-            pose.orientation = rotateQuaternion(max(weighted_poses, key=lambda x: x[1])[0].orientation, rndr * self.RESAMPLE_ROTATION_NOISE)
+            pose.orientation = rotateQuaternion(max_weighted_pose.orientation, rndr * self.ROUGHENING_ROTATION_NOISE)
 
             new_poses.append(pose)
         
