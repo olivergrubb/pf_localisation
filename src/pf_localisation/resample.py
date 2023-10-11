@@ -3,7 +3,7 @@ import math
 #import scipy.integrate as spi
 import copy
 import rospy
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, Quaternion
 
 #me
 def multinomial_resampling(particles, weights, num_of_samples):
@@ -55,7 +55,6 @@ def residual_resampling(particles, weights, num_of_samples):
 def systematic_resampling(particles, weights, num_of_samples):
     num_particles = len(particles)
     sampled_particles = []
-    stochastic_ratio = 1
 
     sum_of_weights = sum(weights)
     normaliser = 1 / sum_of_weights
@@ -90,13 +89,19 @@ def stratified_resampling(particles, weights, num_of_samples):
         cdf.append(cdf[i-1] + weights[i] * normalizer)
     
     # Stratified resampling
-    u = [np.random.uniform(0, 1) / num_particles + (i / num_particles) for i in range(num_particles)]
+    u = [np.random.uniform(0, 1) / num_particles + (i / num_particles) for i in range(num_of_samples)]
+    
+    j = 0
     
     for i in range(num_of_samples):
-        for j in range(num_of_samples):
-            if cdf[j] > u[i]:
-                sampled_particles.append(particles[j])
-                break
+        while j < num_particles and cdf[j] < u[i]:
+            j += 1
+        if j < num_particles:
+            sampled_particles.append(particles[j])
+        else:
+            # If j exceeds the number of particles, wrap it around to 0
+            j = 0
+            sampled_particles.append(particles[j])
 
     return sampled_particles
 
@@ -257,27 +262,38 @@ def smoothed_resampling(particles, weights, num_of_samples):
 #chatgpt
 #I wanted to import this to compare and to read into it but none of this was written by me 
 #Particle Marginal Metropolis-Hastings (PMMH)
-def pmmh_resampling(particles, weights, num_iterations=1000, proposal_std=0.1):
-    # Get the number of particles
-    num_particles = len(particles)
+def update_pose(pose, proposal):
+    updated_pose = Pose()
+    updated_pose.position.x = pose.position.x + proposal
+    updated_pose.position.y = pose.position.y + proposal
+    updated_pose.position.z = 0
+    updated_quat = Quaternion(pose.orientation.w, 0, 0, pose.orientation.z)
+    proposal_quat = Quaternion(0, 0, 0, proposal)
+    updated_quat = proposal_quat * updated_quat
+    updated_pose.orientation.w = updated_quat[0]
+    updated_pose.orientation.z = updated_quat[3]
+    return updated_pose
 
-    # Initialize the MCMC samples list
+def pmmh_resampling(particles, weights, num_iterations=1000, proposal_std=0.1, sample_size=100):
+    num_particles = len(particles)
     mcmc_samples = []
 
-    for _ in range(num_iterations):
-        # MCMC update (using a simple random walk proposal)
-        proposal = np.random.normal(0, proposal_std, num_particles)
-        proposed_particles = particles + proposal
+    while len(mcmc_samples) < sample_size:
+        for _ in range(num_iterations):
+            proposal = np.random.normal(0, proposal_std, num_particles)
+            
+            # Update the pose objects using the provided context and update_pose function
+            proposed_particles = [update_pose(particles[i], proposal[i]) for i in range(num_particles)]
 
-        # Calculate acceptance probability
-        acceptance_prob = np.exp(-0.5 * ((proposed_particles - weights) ** 2).sum() -
-                                0.5 * (proposal ** 2).sum())
+            diff_squared = ((proposed_particles - weights) ** 2).sum()
+            proposal_squared = (proposal ** 2).sum()
+            acceptance_prob = np.exp(-0.5 * diff_squared - 0.5 * proposal_squared)
 
-        # Accept or reject the proposed state with probability acceptance_prob
-        if np.random.uniform(0, 1) < acceptance_prob:
-            particles = proposed_particles
+            if np.random.uniform(0, 1) < acceptance_prob:
+                # Update the particles based on the updated pose objects
+                particles = proposed_particles
 
-        mcmc_samples.append(particles)
+        mcmc_samples.append(particles.copy())
 
     return mcmc_samples
 
