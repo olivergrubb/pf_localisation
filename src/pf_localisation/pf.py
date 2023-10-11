@@ -4,6 +4,7 @@ import math
 import rospy
 import numpy as np
 from . resample import *
+from . clustering import *
 from . util import rotateQuaternion, getHeading
 import random
 
@@ -99,12 +100,12 @@ class PFLocaliser(PFLocaliserBase):
 
         # Systematic resampling
         
-        new_poses = systematic_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        #new_poses = systematic_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
         
 
         # Stratified resampling
         
-        #new_poses = stratified_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        new_poses = stratified_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
         
 
         # Adaptive resampling (Still testing)
@@ -126,6 +127,9 @@ class PFLocaliser(PFLocaliserBase):
         
         #new_poses = residual_stratified_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
         
+        # PMMH resampling
+
+        #new_poses = pmmh_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1])
         """ 
         # Original Ollie resampling code
         # Resample particlecloud
@@ -209,27 +213,11 @@ class PFLocaliser(PFLocaliserBase):
             | (geometry_msgs.msg.Pose) robot's estimated pose.
          """
         
-        xy_values = np.array([(pose.position.x, pose.position.y) for pose in self.particlecloud.poses])
-        wz_values = np.array([(pose.orientation.w, pose.orientation.z) for pose in self.particlecloud.poses])
-        
-        q1 = np.percentile(xy_values, 25, axis=0)
-        q3 = np.percentile(xy_values, 75, axis=0)
-        iqr = q3 - q1
-        lower_bound = q1 - 1.5 * iqr
-        upper_bound = q3 + 1.5 * iqr
-        
-        # Remove outliers
-        
-        non_outliers = xy_values[(xy_values >= lower_bound).all(axis=1) & (xy_values <= upper_bound).all(axis=1)]
-        
-        cluster_centroid = np.mean(non_outliers, axis=0)
-        mean_orientation = np.mean(wz_values, axis=0)
-        
-        estimated_pose = Pose()
-        
-        estimated_pose.position.x = cluster_centroid[0]
-        estimated_pose.position.y = cluster_centroid[1]
-        estimated_pose.orientation.w = mean_orientation[0]
-        estimated_pose.orientation.z = mean_orientation[1]
-        
-        return estimated_pose
+        # Mean of all poses
+        #return mean_pose(self.particlecloud.poses)
+
+        # Basic clustering (mean removing outliers)
+        return mean_poses_removed_outliers(self.particlecloud.poses)
+
+        # DBSCAN clustering
+        #return dbscan(self.particlecloud.poses, 0.05, 5)
