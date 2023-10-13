@@ -264,12 +264,15 @@ def smoothed_resampling(particles, weights, num_of_samples):
 #Particle Marginal Metropolis-Hastings (PMMH)
 def update_pose(pose, proposal):
     updated_pose = Pose()
-    updated_pose.position.x = pose.position.x + proposal
-    updated_pose.position.y = pose.position.y + proposal
+    updated_pose.position.x = pose.position.x + proposal.position.x
+    updated_pose.position.y = pose.position.y + proposal.position.y
     updated_pose.position.z = 0
-    updated_quat = Quaternion(pose.orientation.w, 0, 0, pose.orientation.z)
-    proposal_quat = Quaternion(0, 0, 0, proposal)
-    updated_quat = proposal_quat * updated_quat
+
+    # Use quaternion multiplication to update the orientation
+    current_quat = Quaternion(pose.orientation.w, 0, 0, pose.orientation.z)
+    proposal_quat = Quaternion(0, 0, 0, proposal.orientation.w)
+    updated_quat = current_quat * proposal_quat
+
     updated_pose.orientation.w = updated_quat[0]
     updated_pose.orientation.z = updated_quat[3]
     return updated_pose

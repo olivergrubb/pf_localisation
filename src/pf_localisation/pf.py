@@ -26,9 +26,9 @@ class PFLocaliser(PFLocaliserBase):
         self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
         
         # ----- Initial particle cloud parameters
-        self.NUMBER_OF_PARTICLES = 400
-        self.CLOUD_X_NOISE = 4
-        self.CLOUD_Y_NOISE = 4
+        self.NUMBER_OF_PARTICLES = 350
+        self.CLOUD_X_NOISE = 1
+        self.CLOUD_Y_NOISE = 1
         self.CLOUD_ROTATION_NOISE = 1
         
         # ----- Resample particle cloud parameters
@@ -55,7 +55,8 @@ class PFLocaliser(PFLocaliserBase):
         :Return:
             | (geometry_msgs.msg.PoseArray) poses of the particles
         """
-        
+        initialised_poses = PoseArray()
+
         for i in range(0, self.NUMBER_OF_PARTICLES + 1):
             
             rndx = random.normalvariate(0, 1)
@@ -68,9 +69,11 @@ class PFLocaliser(PFLocaliserBase):
             pose.position.z = 0
             pose.orientation = rotateQuaternion(initialpose.pose.pose.orientation, rndr * self.CLOUD_ROTATION_NOISE)
 
-            self.particlecloud.poses.append(pose)
+            initialised_poses.poses.append(pose)
         
-        return self.particlecloud
+        self.particlecloud = initialised_poses
+
+        return initialised_poses
 
  
     
@@ -100,12 +103,12 @@ class PFLocaliser(PFLocaliserBase):
 
         # Systematic resampling
         
-        #new_poses = systematic_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        new_poses = systematic_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
         
 
         # Stratified resampling
         
-        new_poses = stratified_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        #new_poses = stratified_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
         
 
         # Adaptive resampling (Still testing)
@@ -212,7 +215,7 @@ class PFLocaliser(PFLocaliserBase):
         :Return:
             | (geometry_msgs.msg.Pose) robot's estimated pose.
          """
-        
+                
         # Mean of all poses
         #return mean_pose(self.particlecloud.poses)
 
@@ -221,3 +224,4 @@ class PFLocaliser(PFLocaliserBase):
 
         # DBSCAN clustering
         #return dbscan(self.particlecloud.poses, 0.05, 5)
+
