@@ -26,9 +26,9 @@ class PFLocaliser(PFLocaliserBase):
         self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
         
         # ----- Initial particle cloud parameters
-        self.NUMBER_OF_PARTICLES = 400
-        self.CLOUD_X_NOISE = 2
-        self.CLOUD_Y_NOISE = 2
+        self.NUMBER_OF_PARTICLES = 350
+        self.CLOUD_X_NOISE = 1
+        self.CLOUD_Y_NOISE = 1
         self.CLOUD_ROTATION_NOISE = 1
         
         # ----- Resample particle cloud parameters
@@ -98,12 +98,12 @@ class PFLocaliser(PFLocaliserBase):
         
         # Residual resampling
         
-        new_poses = residual_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        #new_poses = residual_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
         
 
         # Systematic resampling
         
-        #new_poses = systematic_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        new_poses = systematic_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
         
 
         # Stratified resampling
@@ -220,14 +220,8 @@ class PFLocaliser(PFLocaliserBase):
         #return mean_pose(self.particlecloud.poses)
 
         # Basic clustering (mean removing outliers)
-        #return mean_poses_removed_outliers(self.particlecloud.poses)
+        return mean_poses_removed_outliers(self.particlecloud.poses)
 
         # DBSCAN clustering
         #return dbscan(self.particlecloud.poses, 0.05, 5)
-        t = time.time()
-        estimate = dbscan(self.particlecloud.poses, 0.05, 5)
-        rospy.loginfo(f"Time taken: {time.time() - t}")
-        file = open("time_test_results/estimate_dbspan_results.txt", "a")  # append mode
-        file.write(f"{time.time() - t}\n")
-        file.close()
-        return estimate
+

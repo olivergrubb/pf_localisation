@@ -1,6 +1,8 @@
 from geometry_msgs.msg import Pose
 import numpy as np
 import rospy
+import time
+
 
 def mean_pose(poses):
     xy_values = np.array([(pose.position.x, pose.position.y) for pose in poses])

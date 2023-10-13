@@ -49,7 +49,7 @@ def rmse_of_ground_truth_and_estimate(test_bag):
     plt.plot(time_values, error_values)
     plt.xlabel('Time')
     plt.ylabel('Root Mean Square Error')
-    plt.title('RMSE of Ground Truth and Estimate for Residual Resampling')
+    plt.title('RMSE of Ground Truth and Estimate for Residual Stratified Resampling')
     plt.legend()
     plt.grid(True)
     plt.show()
@@ -61,5 +61,5 @@ def average_time(time_file):
             times.append(float(line))
     return np.mean(times)
 
-print(average_time("time_test_results/estimate_dbspan_results.txt"))
-#rmse_of_ground_truth_and_estimate("/home/ollie/catkin_ws/src/pf_localisation/src/pf_localisation/bag_files/residual_mpro_ground_truth_poses_and_estimated_poses.bag")
+#print(average_time("time_test_results/estimate_dbspan_results.txt"))
+rmse_of_ground_truth_and_estimate("/home/ollie/catkin_ws/src/pf_localisation/src/pf_localisation/bag_files/residual_stratified_mpro_ground_truth_poses_and_estimated_poses.bag")
