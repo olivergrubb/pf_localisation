@@ -21,8 +21,8 @@ def mean_poses_removed_outliers(poses):
     xy_values = np.array([(pose.position.x, pose.position.y) for pose in poses])
     wz_values = np.array([(pose.orientation.w, pose.orientation.z) for pose in poses])
     
-    q1 = np.percentile(xy_values, 25, axis=0)
-    q3 = np.percentile(xy_values, 75, axis=0)
+    q1 = np.percentile(xy_values, 45, axis=0)
+    q3 = np.percentile(xy_values, 55, axis=0)
     iqr = q3 - q1
     lower_bound = q1 - 1.5 * iqr
     upper_bound = q3 + 1.5 * iqr
