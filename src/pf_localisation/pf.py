@@ -1,14 +1,10 @@
-from geometry_msgs.msg import Pose, PoseArray, Quaternion
+from geometry_msgs.msg import Pose, PoseArray
 from . pf_base import PFLocaliserBase
 import math
-import rospy
-import numpy as np
 from . resample import *
 from . clustering import *
-from . util import rotateQuaternion, getHeading
+from . util import rotateQuaternion
 import random
-
-import time
 
 
 class PFLocaliser(PFLocaliserBase):
@@ -26,15 +22,15 @@ class PFLocaliser(PFLocaliserBase):
         self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
         
         # ----- Initial particle cloud parameters
-        self.NUMBER_OF_PARTICLES = 350
+        self.NUMBER_OF_PARTICLES = 400
         self.CLOUD_X_NOISE = 1
         self.CLOUD_Y_NOISE = 1
         self.CLOUD_ROTATION_NOISE = 1
         
         # ----- Resample particle cloud parameters
-        self.ROUGHENING_X_NOISE = 0.1
-        self.ROUGHENING_Y_NOISE = 0.1
-        self.ROUGHENING_ROTATION_NOISE = 0.1
+        self.ROUGHENING_X_NOISE = 0.05
+        self.ROUGHENING_Y_NOISE = 0.05
+        self.ROUGHENING_ROTATION_NOISE = 0.05
         
         self.STOCHASTIC_RATIO = 0.8
         self.RANDOM_EXPLORATION_RATIO = 0.1
@@ -103,7 +99,7 @@ class PFLocaliser(PFLocaliserBase):
 
         # Systematic resampling
         
-        new_poses = systematic_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        #new_poses = systematic_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
         
 
         # Stratified resampling
@@ -128,7 +124,7 @@ class PFLocaliser(PFLocaliserBase):
 
         # Residual stratisfied resampling
         
-        #new_poses = residual_stratified_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        new_poses = residual_stratified_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
         
         # PMMH resampling
 

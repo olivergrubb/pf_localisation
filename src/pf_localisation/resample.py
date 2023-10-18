@@ -1,13 +1,9 @@
 import numpy as np 
-import math
-#import scipy.integrate as spi
 import copy
 import rospy
-from geometry_msgs.msg import Pose, Quaternion
+from geometry_msgs.msg import Pose
 
-#me
 def multinomial_resampling(particles, weights, num_of_samples):
-    num_particles = len(particles)
     sampled_particles = []
 
     sum_of_weights = 0
@@ -26,7 +22,6 @@ def multinomial_resampling(particles, weights, num_of_samples):
         sampled_particles.append(sample)
     return sampled_particles
 
-#me
 def residual_resampling(particles, weights, num_of_samples):
     num_particles = len(particles)
     sampled_particles = []
@@ -51,7 +46,6 @@ def residual_resampling(particles, weights, num_of_samples):
 
     return sampled_particles
 
-#me
 def systematic_resampling(particles, weights, num_of_samples):
     num_particles = len(particles)
     sampled_particles = []
@@ -76,7 +70,6 @@ def systematic_resampling(particles, weights, num_of_samples):
 
     return sampled_particles
 
-#me
 def stratified_resampling(particles, weights, num_of_samples):
     num_particles = len(particles)
     sampled_particles = []
@@ -105,7 +98,7 @@ def stratified_resampling(particles, weights, num_of_samples):
 
     return sampled_particles
 
-#me
+# Non-functional
 def adaptive_resampling(particles, weights, num_of_samples, weight_threshold, particle_threshold):
     num_particles = len(particles)
     low_weight_particles = []
@@ -144,7 +137,7 @@ def adaptive_resampling(particles, weights, num_of_samples, weight_threshold, pa
     
     return sampled_particles
 
-#me
+
 def compute_weighted_average(particles, weights):
     num_particles = len(particles)
     weighted_sum_x = 0
@@ -166,9 +159,7 @@ def compute_weighted_average(particles, weights):
 
     return (weighted_avg_x, weighted_avg_y, weighted_avg_w, weighted_avg_z)
 
-#me
 def reguralized_resampling(particles, weights, num_of_samples, regularization_factor):
-    num_particles = len(particles)
     sampled_particles = []
     weighted_average = compute_weighted_average(particles, weights)
 
@@ -219,7 +210,6 @@ def residual_stratified_resampling(particles, weights, sample_size):
 
     return [p for p in new_particles if p is not None]
 
-#me with help learning copy import
 def smoothed_resampling(particles, weights, num_of_samples):
     num_particles = num_of_samples
     total_weight = sum(weights)
@@ -257,60 +247,6 @@ def smoothed_resampling(particles, weights, num_of_samples):
         resampled_particles.append(copy.copy(particles[index]))
 
     # Return the resampled set of particles
-    return resampled_particles
-
-#chatgpt
-#I wanted to import this to compare and to read into it but none of this was written by me 
-#Particle Marginal Metropolis-Hastings (PMMH)
-def update_pose(pose, proposal):
-    updated_pose = Pose()
-    updated_pose.position.x = pose.position.x + proposal.position.x
-    updated_pose.position.y = pose.position.y + proposal.position.y
-    updated_pose.position.z = 0
-
-    # Use quaternion multiplication to update the orientation
-    current_quat = Quaternion(pose.orientation.w, 0, 0, pose.orientation.z)
-    proposal_quat = Quaternion(0, 0, 0, proposal.orientation.w)
-    updated_quat = current_quat * proposal_quat
-
-    updated_pose.orientation.w = updated_quat[0]
-    updated_pose.orientation.z = updated_quat[3]
-    return updated_pose
-
-def pmmh_resampling(particles, weights, num_iterations=1000, proposal_std=0.1, sample_size=100):
-    num_particles = len(particles)
-    mcmc_samples = []
-
-    while len(mcmc_samples) < sample_size:
-        for _ in range(num_iterations):
-            proposal = np.random.normal(0, proposal_std, num_particles)
-            
-            # Update the pose objects using the provided context and update_pose function
-            proposed_particles = [update_pose(particles[i], proposal[i]) for i in range(num_particles)]
-
-            diff_squared = ((proposed_particles - weights) ** 2).sum()
-            proposal_squared = (proposal ** 2).sum()
-            acceptance_prob = np.exp(-0.5 * diff_squared - 0.5 * proposal_squared)
-
-            if np.random.uniform(0, 1) < acceptance_prob:
-                # Update the particles based on the updated pose objects
-                particles = proposed_particles
-
-        mcmc_samples.append(particles.copy())
-
-    return mcmc_samples
-
-
-#This code takes pre-defined particles and weights as input and performs the resampling part of the PMMH algorithm using a Gaussian
-
-#me
-def auxiliary_particle_resampling(particles, weights):
-    total_weight = sum(weights)
-    normalized_weights = [weights / total_weight ]
-
-        # Resample particles using the provided resampling method
-    resampled_particles = residual_stratified_resampling(particles, normalized_weights)
-
     return resampled_particles
 
 

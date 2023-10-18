@@ -1,8 +1,5 @@
 from geometry_msgs.msg import Pose
 import numpy as np
-import rospy
-import time
-
 
 def mean_pose(poses):
     xy_values = np.array([(pose.position.x, pose.position.y) for pose in poses])
@@ -33,7 +30,7 @@ def mean_poses_removed_outliers(poses):
     # Remove outliers
     
     non_outliers = xy_values[(xy_values >= lower_bound).all(axis=1) & (xy_values <= upper_bound).all(axis=1)]
-    
+
     cluster_centroid = np.mean(non_outliers, axis=0)
     mean_orientation = np.mean(wz_values, axis=0)
     
