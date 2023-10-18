@@ -19,7 +19,6 @@ def mean_pose(poses):
 
 def mean_poses_removed_outliers(poses):
     xy_values = np.array([(pose.position.x, pose.position.y) for pose in poses])
-    wz_values = np.array([(pose.orientation.w, pose.orientation.z) for pose in poses])
     
     q1 = np.percentile(xy_values, 45, axis=0)
     q3 = np.percentile(xy_values, 55, axis=0)
@@ -30,6 +29,8 @@ def mean_poses_removed_outliers(poses):
     # Remove outliers
     
     non_outliers = xy_values[(xy_values >= lower_bound).all(axis=1) & (xy_values <= upper_bound).all(axis=1)]
+        
+    wz_values = np.array([(pose.orientation.w, pose.orientation.z) for pose in poses if (pose.position.x, pose.position.y) in non_outliers])
 
     cluster_centroid = np.mean(non_outliers, axis=0)
     mean_orientation = np.mean(wz_values, axis=0)
