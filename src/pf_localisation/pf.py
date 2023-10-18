@@ -5,7 +5,7 @@ from . resample import *
 from . clustering import *
 from . util import rotateQuaternion
 import random
-
+import rospy
 
 class PFLocaliser(PFLocaliserBase):
        
@@ -22,10 +22,17 @@ class PFLocaliser(PFLocaliserBase):
         self.NUMBER_PREDICTED_READINGS = 20     # Number of readings to predict
         
         # ----- Initial particle cloud parameters
-        self.NUMBER_OF_PARTICLES = 400
+        self.number_of_particles = 400
+        self.MAX_PARTICLES = 1000
+        self.MIN_PARTICLES = 150
         self.CLOUD_X_NOISE = 1
         self.CLOUD_Y_NOISE = 1
         self.CLOUD_ROTATION_NOISE = 1
+
+        self.short_term_likelihood = 0.0
+        self.long_term_likelihood = 0.0
+        self.long_term_alpha = 0.01  # Decay factor for long-term likelihood
+        self.L_threshold = 1.2
         
         # ----- Resample particle cloud parameters
         self.ROUGHENING_X_NOISE = 0.05
@@ -35,6 +42,9 @@ class PFLocaliser(PFLocaliserBase):
         self.STOCHASTIC_RATIO = 0.8
         self.RANDOM_EXPLORATION_RATIO = 0.1
         self.EDUCATED_ESTIMATE_RATIO = 0.1
+
+        self.RANDOM_EXPLORATION_RATIO_MAX = 0.6
+        self.RANDOM_EXPLORATION_RATIO_MIN = 0.05
 
        
     def initialise_particle_cloud(self, initialpose):
@@ -53,7 +63,9 @@ class PFLocaliser(PFLocaliserBase):
         """
         initialised_poses = PoseArray()
 
-        for i in range(0, self.NUMBER_OF_PARTICLES + 1):
+        self.number_of_particles = self.MAX_PARTICLES
+
+        for i in range(0, self.number_of_particles + 1):
             
             rndx = random.normalvariate(0, 1)
             rndy = random.normalvariate(0, 1)
@@ -86,45 +98,71 @@ class PFLocaliser(PFLocaliserBase):
         # Get likelihood weighting of each pose
         weighted_poses = [(pose, self.sensor_model.get_weight(scan, pose)) for pose in self.particlecloud.poses]
         
+        self.short_term_likelihood = sum(list(zip(*weighted_poses))[1]) / len(weighted_poses)
+
+        self.long_term_likelihood = (1 - self.long_term_alpha) * self.long_term_likelihood \
+                                     + self.long_term_alpha * self.short_term_likelihood
+        
+        # Calculate number of particles to resample
+        #rospy.loginfo(f"{1 - (self.long_term_likelihood / self.short_term_likelihood)}")
+        
+        if 1 - (self.long_term_likelihood / self.short_term_likelihood) < -0.5:
+            #Increase the number of particles
+            if self.number_of_particles < self.MAX_PARTICLES:
+                self.number_of_particles += 10
+
+            #Increase exploration ratio
+            if self.RANDOM_EXPLORATION_RATIO < self.RANDOM_EXPLORATION_RATIO_MAX:
+                self.RANDOM_EXPLORATION_RATIO += 0.01
+            rospy.loginfo(f"{1 - (self.long_term_likelihood / self.short_term_likelihood)} LOST")
+        else:
+            #Decrease the number of particles
+            if self.number_of_particles > self.MIN_PARTICLES:
+                self.number_of_particles -= 10
+
+            #Decrease exploration ratio
+            if self.RANDOM_EXPLORATION_RATIO > self.RANDOM_EXPLORATION_RATIO_MIN:
+                self.RANDOM_EXPLORATION_RATIO -= 0.01
+            rospy.loginfo(f"{1 - (self.long_term_likelihood / self.short_term_likelihood)} FOUND")
         
         # Multinomial resampling
         
-        #new_poses = multinomial_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        #new_poses = multinomial_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.number_of_particles * self.STOCHASTIC_RATIO))
         
         
         # Residual resampling
         
-        #new_poses = residual_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        #new_poses = residual_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.number_of_particles * self.STOCHASTIC_RATIO))
         
 
         # Systematic resampling
         
-        #new_poses = systematic_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        #new_poses = systematic_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.number_of_particles * self.STOCHASTIC_RATIO))
         
 
         # Stratified resampling
         
-        #new_poses = stratified_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        #new_poses = stratified_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.number_of_particles * self.STOCHASTIC_RATIO))
         
 
         # Adaptive resampling (Still testing)
         
-        #new_poses = adaptive_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO), 0.5, self.NUMBER_OF_PARTICLES/2)
+        #new_poses = adaptive_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.number_of_particles * self.STOCHASTIC_RATIO), 0.5, self.number_of_particles/2)
         
 
         # reguralized resampling
         
-        #new_poses = reguralized_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO), 0.5)
+        #new_poses = reguralized_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.number_of_particles * self.STOCHASTIC_RATIO), 0.5)
         
         
         # Smoothed resampling
         
-        #new_poses = smoothed_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        #new_poses = smoothed_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.number_of_particles * self.STOCHASTIC_RATIO))
         
 
         # Residual stratisfied resampling
         
-        new_poses = residual_stratified_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO))
+        new_poses = residual_stratified_resampling(list(zip(*weighted_poses))[0], list(zip(*weighted_poses))[1], math.floor(self.number_of_particles * self.STOCHASTIC_RATIO))
         
         # PMMH resampling
 
@@ -151,14 +189,14 @@ class PFLocaliser(PFLocaliserBase):
         i = 0
         
         # Resample select portion of poses
-        for j in range(0, math.floor(self.NUMBER_OF_PARTICLES * self.STOCHASTIC_RATIO)):
+        for j in range(0, math.floor(self.number_of_particles * self.STOCHASTIC_RATIO)):
             while threshold > cdf[i]:
                 i += 1
             new_poses.append(weighted_poses[i][0])
             threshold += 1/len(weighted_poses)
         """
         # Add some estimate poses
-        for k in range(0, math.floor(self.NUMBER_OF_PARTICLES * self.EDUCATED_ESTIMATE_RATIO)):
+        for k in range(0, math.floor(self.number_of_particles * self.EDUCATED_ESTIMATE_RATIO)):
             rndx = random.normalvariate(0, 1)
             rndy = random.normalvariate(0, 1)
             rndr = random.normalvariate(0, 1)
@@ -176,7 +214,7 @@ class PFLocaliser(PFLocaliserBase):
             new_poses.append(pose)
         
         # Add some random exploratory poses
-        for l in range(0, math.floor(self.NUMBER_OF_PARTICLES * self.RANDOM_EXPLORATION_RATIO)):
+        for l in range(0, math.floor(self.number_of_particles * self.RANDOM_EXPLORATION_RATIO)):
             # Based off map lying on grid line y = 30 - x with thickness of approx 10 at widest
             rnd = random.normalvariate(0, 5)
             
